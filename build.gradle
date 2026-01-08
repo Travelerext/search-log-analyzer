@@ -1,0 +1,64 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'com.sohu.logs'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+ext {
+    hadoopVersion = '3.3.6'
+    hbaseVersion = '2.5.13'
+    sparkVersion = '3.5.7'
+}
+
+dependencies {
+    // HBase
+    implementation "org.apache.hbase:hbase-client:${hbaseVersion}"
+    implementation "org.apache.hbase:hbase-common:${hbaseVersion}"
+    implementation "org.apache.hbase:hbase-server:${hbaseVersion}"
+    implementation "org.apache.hadoop:hadoop-mapreduce-client-core:${hadoopVersion}"
+    
+    // Hadoop
+    implementation "org.apache.hadoop:hadoop-common:${hadoopVersion}"
+    implementation "org.apache.hadoop:hadoop-hdfs-client:${hadoopVersion}"
+    implementation "org.apache.hadoop:hadoop-hdfs:${hadoopVersion}"
+    
+    // Spark
+    implementation "org.apache.spark:spark-core_2.12:${sparkVersion}"
+    implementation "org.apache.spark:spark-sql_2.12:${sparkVersion}"
+    
+    // Utilities
+    implementation 'com.google.guava:guava:32.1.3-jre'
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+    implementation 'org.slf4j:slf4j-simple:2.0.13'
+    
+    // Redis
+    implementation 'redis.clients:jedis:4.3.1'
+    
+    // MongoDB
+    implementation 'org.mongodb:mongodb-driver-sync:4.11.0'
+    
+    // Chart libraries
+    implementation 'org.jfree:jfreechart:1.5.3'
+    implementation 'org.jfree:jcommon:1.0.24'
+    
+}
+
+application {
+    mainClass = 'com.sohu.logs.MainApplication'
+}
+
+run {
+    standardInput = System.in
+}
+
