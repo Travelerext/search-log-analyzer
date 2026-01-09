@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HBase查询 - 搜狐搜索日志分析系统</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <style>
+        .section { display: none; }
+        .section.active { display: block; }
+        .results-summary { margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, #1a1a1a 0%, #111 100%); border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
+        .show-more-btn { background: #111; color: #fff; border: 1px solid #666; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-top: 10px; font-size: 12px; }
+        .show-more-btn:hover { background: #333; color: #fff; border-color: #fff; }
+        .result-details { background: #111; border-radius: 6px; padding: 16px; margin-top: 12px; }
+        .result-details pre { margin: 0; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div class="top-nav">
+        <div class="nav-left">
+            <a href="/">主页</a>
+            <a href="/hbase" class="active">HBase查询</a>
+            <a href="/spark">Spark查询与分析</a>
+        </div>
+        <div class="nav-right">
+            <button class="shutdown-btn" onclick="shutdownServer()">关闭Dashboard</button>
+        </div>
+    </div>
+    <div class="container">
+        <div class="sidebar">
+            <h3>功能</h3>
+            <a class="sidebar-btn active" data-section="rowkey-section">行键精确查询</a>
+            <a class="sidebar-btn" data-section="condition-section">HBase条件查询</a>
+        </div>
+        <div class="main-content">
+            <!-- Row Key Search Section -->
+            <div class="section active" id="rowkey-section">
+                <h2>行键精确查询</h2>
+                <div class="section-content">
+                    <div class="config-panel">
+                        <div class="form-group">
+                            <label for="rowkey-input">行键:</label>
+                            <input type="text" id="rowkey-input" placeholder="例如: 0_user123#sohu">
+                        </div>
+                    </div>
+                    <div class="action-panel">
+                        <button onclick="searchRowKey()">查询</button>
+                        <div id="rowkey-result" class="result"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Condition Search Section -->
+            <div class="section" id="condition-section">
+                <h2>HBase条件查询</h2>
+                <div class="section-content">
+                    <div class="config-panel">
+                        <div class="form-group">
+                            <label for="condition-input">搜索条件:</label>
+                            <input type="text" id="condition-input" placeholder="time:00:00:00|01:00:00 + user:user1|用户2 + query:关键词 + domain:域名 + rank:最小-最大 + click:最小-最大">
+                            <small>格式: time:开始时间|结束时间 + user:用户1|用户2 + query:关键词 + domain:域名 + rank:最小-最大 + click:最小-最大</small>
+                        </div>
+                    </div>
+                    <div class="action-panel">
+                        <button onclick="searchCondition()">查询</button>
+                        <div id="condition-result" class="result"></div>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+    <div class="terminal-container">
+        <h2>终端信息</h2>
+        <textarea id="terminal" readonly></textarea>
+        <button onclick="clearTerminal()">清空终端</button>
+    </div>
+
+    <script>
+           async function searchRowKey() {
+               const rowkey = document.getElementById('rowkey-input').value;
+               if (!rowkey) {
+                   alert('请输入行键');
+                   return;
+               }
+               const btn = event.target;
+               const resultDiv = document.getElementById('rowkey-result');
+               btn.disabled = true;
+               btn.classList.add('btn-loading');
+               resultDiv.innerHTML = '';
+               logToTerminal('开始行键查询: ' + rowkey);
+               try {
+                   const response = await fetch('/api/search/rowkey', {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify({ rowkey: rowkey })
+                   });
+                   const data = await response.json();
+                   if (data.success) {
+                       logToTerminal('行键查询完成: ' + rowkey);
+                       
+                       let html = '';
+                       html += '<div class="results-summary">';
+                       html += '<strong>查询行键:</strong> ' + escapeHtml(rowkey) + '<br>';
+                       html += '<strong>状态:</strong> ' + (data.message || (data.found ? '找到记录' : '未找到记录'));
+                       html += '</div>';
+                       
+                       if (data.found && data.result) {
+                           const record = data.result;
+                           html += '<div class="result-details" style="margin-top: 15px;">';
+                           html += '<table style="width:100%; border-collapse: collapse;">';
+                           html += '<tr><td style="width:120px; padding:8px; background:#222;"><strong>行键</strong></td><td style="padding:8px;">' + escapeHtml(record.rowKey || '') + '</td></tr>';
+                           html += '<tr><td style="padding:8px; background:#222;"><strong>访问时间</strong></td><td style="padding:8px;">' + escapeHtml(record.accessTime || '') + '</td></tr>';
+                           html += '<tr><td style="padding:8px; background:#222;"><strong>用户ID</strong></td><td style="padding:8px;">' + escapeHtml(record.userId || '') + '</td></tr>';
+                           html += '<tr><td style="padding:8px; background:#222;"><strong>查询词</strong></td><td style="padding:8px;">' + escapeHtml(record.query || '') + '</td></tr>';
+                           html += '<tr><td style="padding:8px; background:#222;"><strong>排名</strong></td><td style="padding:8px;">' + escapeHtml(record.rank || '') + '</td></tr>';
+                           html += '<tr><td style="padding:8px; background:#222;"><strong>点击顺序</strong></td><td style="padding:8px;">' + escapeHtml(record.clickOrder || '') + '</td></tr>';
+                           html += '<tr><td style="padding:8px; background:#222;"><strong>URL</strong></td><td style="padding:8px; word-break: break-all;">' + escapeHtml(record.url || '') + '</td></tr>';
+                           html += '<tr><td style="padding:8px; background:#222;"><strong>域名</strong></td><td style="padding:8px;">' + escapeHtml(record.domain || '') + '</td></tr>';
+                           html += '</table>';
+                           html += '</div>';
+                           
+                           logToTerminal('行键查询结果: 找到记录');
+                       } else {
+                           html += '<div class="results-summary" style="background: #330000; border-color: #ff4444;">';
+                           html += '<strong>未找到行键对应的记录</strong>';
+                           html += '</div>';
+                           logToTerminal('行键查询结果: 未找到记录');
+                       }
+                       
+
+                       
+                       resultDiv.innerHTML = html;
+                   } else {
+                       resultDiv.innerHTML = '<span class="error">错误: ' + (data.error || '未知错误') + '</span>';
+                       logToTerminal('行键查询错误: ' + (data.error || '未知错误'));
+                   }
+               } catch (error) {
+                   resultDiv.innerHTML = '<span class="error">错误: ' + error.message + '</span>';
+                   logToTerminal('行键查询异常: ' + error.message);
+               } finally {
+                   btn.disabled = false;
+                   btn.classList.remove('btn-loading');
+               }
+           }
+
+           // 全局变量存储HBase查询结果和分页状态
+           let hbaseResults = [];
+           let hbaseCurrentPage = 1;
+           let hbasePageSize = 20;
+           let hbaseTotalResults = 0;
+           
+           async function searchCondition() {
+               const condition = document.getElementById('condition-input').value;
+               if (!condition) {
+                   alert('请输入搜索条件');
+                   return;
+               }
+               const btn = event.target;
+               const resultDiv = document.getElementById('condition-result');
+               btn.disabled = true;
+               btn.classList.add('btn-loading');
+               resultDiv.innerHTML = '';
+               logToTerminal('开始HBase条件查询: ' + condition);
+               try {
+                   const response = await fetch('/api/search/condition', {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify({ condition: condition })
+                   });
+                   const data = await response.json();
+                   if (data.success) {
+                       logToTerminal('HBase条件查询完成: ' + condition);
+                       
+                       // 存储结果
+                       hbaseResults = data.results || [];
+                       hbaseTotalResults = data.count || 0;
+                       hbaseCurrentPage = 1;
+                       
+                       // 显示结果
+                       displayHBaseResults();
+                       
+                       logToTerminal('HBase条件查询结果: 找到 ' + data.count + ' 条记录');
+                   } else {
+                       resultDiv.innerHTML = '<span class="error">错误: ' + (data.error || '未知错误') + '</span>';
+                       logToTerminal('HBase条件查询错误: ' + (data.error || '未知错误'));
+                   }
+               } catch (error) {
+                   resultDiv.innerHTML = '<span class="error">错误: ' + error.message + '</span>';
+                   logToTerminal('HBase条件查询异常: ' + error.message);
+               } finally {
+                   btn.disabled = false;
+                   btn.classList.remove('btn-loading');
+               }
+           }
+           
+           function displayHBaseResults() {
+               const resultDiv = document.getElementById('condition-result');
+               if (!hbaseResults || hbaseResults.length === 0) {
+                   let html = '<div class="results-summary">';
+                   html += '<strong>查询条件:</strong> 无结果<br>';
+                   html += '<strong>结果数量:</strong> 0 条记录<br>';
+                   html += '<strong>状态:</strong> 未找到符合条件的记录';
+                   html += '</div>';
+                   html += '<div class="results-summary" style="background: #330000; border-color: #ff4444;">';
+                   html += '<strong>未找到符合条件的记录</strong>';
+                   html += '</div>';
+                   resultDiv.innerHTML = html;
+                   return;
+               }
+               
+               // 计算分页
+               const totalPages = Math.ceil(hbaseResults.length / hbasePageSize);
+               const startIndex = (hbaseCurrentPage - 1) * hbasePageSize;
+               const endIndex = Math.min(startIndex + hbasePageSize, hbaseResults.length);
+               const pageResults = hbaseResults.slice(startIndex, endIndex);
+               
+               let html = '';
+               html += '<div class="results-summary">';
+               html += '<strong>查询条件:</strong> 已查询<br>';
+               html += '<strong>结果数量:</strong> ' + hbaseResults.length + ' 条记录<br>';
+               html += '<strong>状态:</strong> 找到 ' + hbaseResults.length + ' 条记录';
+               html += '</div>';
+               
+               html += '<div style="margin-top: 15px;">';
+               html += '<table class="results-table">';
+               html += '<thead><tr>';
+               html += '<th>时间</th><th>用户</th><th>查询词</th><th>排名</th><th>点击顺序</th><th>URL</th><th>域名</th>';
+               html += '</tr></thead>';
+               html += '<tbody>';
+               
+               pageResults.forEach((record, index) => {
+                   html += '<tr>';
+                   html += '<td>' + escapeHtml(record.accessTime || '') + '</td>';
+                   html += '<td>' + escapeHtml(record.userId || '') + '</td>';
+                   html += '<td>' + escapeHtml(record.query || '') + '</td>';
+                   html += '<td>' + escapeHtml(record.rank || '') + '</td>';
+                   html += '<td>' + escapeHtml(record.clickOrder || '') + '</td>';
+                   html += '<td title="' + escapeHtml(record.url || '') + '" style="word-break: break-all; max-width: 200px;">' + 
+                           escapeHtml(record.url || '') + '</td>';
+                   html += '<td>' + escapeHtml(record.domain || '') + '</td>';
+                   html += '</tr>';
+               });
+               
+               html += '</tbody></table>';
+               
+               // 分页器
+               if (totalPages > 1) {
+                   html += '<div class="pagination">';
+                   html += '<button onclick="changeHBasePage(1)" ' + (hbaseCurrentPage === 1 ? 'disabled' : '') + '>«</button>';
+                   html += '<button onclick="changeHBasePage(' + (hbaseCurrentPage - 1) + ')" ' + (hbaseCurrentPage === 1 ? 'disabled' : '') + '>‹</button>';
+                   
+                   // 显示页码
+                   const startPage = Math.max(1, hbaseCurrentPage - 2);
+                   const endPage = Math.min(totalPages, startPage + 4);
+                   
+                   for (let i = startPage; i <= endPage; i++) {
+                       html += '<button onclick="changeHBasePage(' + i + ')" ' + (i === hbaseCurrentPage ? 'class="active"' : '') + '>' + i + '</button>';
+                   }
+                   
+                   html += '<button onclick="changeHBasePage(' + (hbaseCurrentPage + 1) + ')" ' + (hbaseCurrentPage === totalPages ? 'disabled' : '') + '>›</button>';
+                   html += '<button onclick="changeHBasePage(' + totalPages + ')" ' + (hbaseCurrentPage === totalPages ? 'disabled' : '') + '>»</button>';
+                   
+                   html += '<span class="pagination-info">第 ' + hbaseCurrentPage + ' 页 / 共 ' + totalPages + ' 页</span>';
+                   html += '<span class="pagination-info">显示 ' + (startIndex + 1) + '-' + endIndex + ' 条 / 共 ' + hbaseResults.length + ' 条</span>';
+                   html += '</div>';
+               }
+               
+               html += '</div>';
+               
+               resultDiv.innerHTML = html;
+           }
+           
+           function changeHBasePage(page) {
+               if (page < 1 || page > Math.ceil(hbaseResults.length / hbasePageSize)) return;
+               hbaseCurrentPage = page;
+               displayHBaseResults();
+           }
+          
+          function showAllResults(btn, startIndex) {
+              const hiddenDiv = btn.nextElementSibling;
+              const table = btn.previousElementSibling;
+              const tbody = table.querySelector('tbody');
+              
+              hiddenDiv.style.display = 'block';
+              const hiddenRows = hiddenDiv.querySelectorAll('tr');
+              hiddenRows.forEach(row => {
+                  tbody.appendChild(row.cloneNode(true));
+              });
+              
+              btn.style.display = 'none';
+              hiddenDiv.style.display = 'none';
+          }
+
+        async function loadData() {
+            const filePath = document.getElementById('data-file').value;
+            const zkQuorum = document.getElementById('load-zk-quorum').value;
+            const zkPort = document.getElementById('load-zk-port').value;
+
+            if (!filePath) {
+                alert('请输入数据文件路径');
+                return;
+            }
+
+            const btn = event.target;
+            const resultDiv = document.getElementById('load-result');
+            btn.disabled = true;
+            btn.classList.add('btn-loading');
+            resultDiv.innerHTML = '';
+            try {
+                const response = await fetch('/api/data/load', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filePath: filePath,
+                        zkQuorum: zkQuorum,
+                        zkPort: zkPort
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    const taskId = data.taskId;
+                    resultDiv.innerHTML = '<span class="success">任务已启动，ID: ' + taskId + '</span><br><div class="progress-bar"><div class="progress-fill" id="progress-fill-' + taskId + '" style="width: 0%;"></div></div><div id="progress-text-' + taskId + '">准备中...</div>';
+                    pollTaskStatus(taskId, resultDiv);
+                } else {
+                    resultDiv.innerHTML = '<span class="error">错误: ' + data.error + '</span>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<span class="error">错误: ' + error.message + '</span>';
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('btn-loading');
+            }
+        }
+
+        async function cleanData() {
+            if (!confirm('确定要清空数据表吗？此操作不可逆！')) {
+                return;
+            }
+            const btn = event.target;
+            const resultDiv = document.getElementById('clean-result');
+            btn.disabled = true;
+            btn.classList.add('btn-loading');
+            resultDiv.innerHTML = '';
+            try {
+                const response = await fetch('/api/data/clean', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    const taskId = data.taskId;
+                    resultDiv.innerHTML = '<span class="success">任务已启动，ID: ' + taskId + '</span><br><div class="progress-bar"><div class="progress-fill" id="progress-fill-' + taskId + '" style="width: 0%;"></div></div><div id="progress-text-' + taskId + '">准备中...</div>';
+                    pollTaskStatus(taskId, resultDiv);
+                } else {
+                    resultDiv.innerHTML = '<span class="error">错误: ' + data.error + '</span>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<span class="error">错误: ' + error.message + '</span>';
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('btn-loading');
+            }
+        }
+
+        function pollTaskStatus(taskId, resultDiv) {
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/task/status/' + taskId);
+                    const task = await response.json();
+                    const progressText = document.getElementById('progress-text-' + taskId);
+                    const progressFill = document.getElementById('progress-fill-' + taskId);
+                    if (progressText) progressText.textContent = task.progress || task.status;
+                    if (progressFill) progressFill.style.width = task.progress || '0%';
+
+                    // 处理控制台输出
+                    if (task.output) {
+                        const previousOutput = taskOutputMap.get(taskId) || '';
+                        if (task.output.length > previousOutput.length) {
+                            const newOutput = task.output.slice(previousOutput.length);
+                            logToTerminal(newOutput);
+                            taskOutputMap.set(taskId, task.output);
+                        }
+                    }
+
+                    if (task.status === 'completed') {
+                        clearInterval(interval);
+                        resultDiv.innerHTML = '<span class="success">' + task.result + '</span>';
+                        logToTerminal(task.type + ': ' + task.result);
+                        taskOutputMap.delete(taskId);
+                    } else if (task.status === 'failed') {
+                        clearInterval(interval);
+                        resultDiv.innerHTML = '<span class="error">' + task.result + '</span>';
+                        taskOutputMap.delete(taskId);
+                    }
+                } catch (error) {
+                    clearInterval(interval);
+                    resultDiv.innerHTML = '<span class="error">查询任务状态失败: ' + error.message + '</span>';
+                }
+            }, 2000);
+        }
+
+        const taskOutputMap = new Map();
+        function logToTerminal(message) {
+            const terminal = document.getElementById('terminal');
+            terminal.value += '[' + new Date().toLocaleTimeString() + '] ' + message + '\n';
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+        
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Sidebar navigation
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebarButtons = document.querySelectorAll('.sidebar-btn');
+            
+            // Function to switch section
+            function switchSection(sectionId) {
+                // Hide all sections
+                document.querySelectorAll('.section').forEach(section => {
+                    section.classList.remove('active');
+                });
+                
+                // Show selected section
+                const selectedSection = document.getElementById(sectionId);
+                if (selectedSection) {
+                    selectedSection.classList.add('active');
+                }
+                
+                // Update active button
+                sidebarButtons.forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.getAttribute('data-section') === sectionId) {
+                        btn.classList.add('active');
+                    }
+                });
+            }
+            
+            // Add click event to sidebar buttons
+            sidebarButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const sectionId = this.getAttribute('data-section');
+                    switchSection(sectionId);
+                });
+            });
+            
+            // Initialize with first section active
+            if (sidebarButtons.length > 0) {
+                const firstSectionId = sidebarButtons[0].getAttribute('data-section');
+                switchSection(firstSectionId);
+            }
+        });
+
+        function clearTerminal() {
+            document.getElementById('terminal').value = '';
+        }
+
+        async function shutdownServer() {
+            if (!confirm('确定要关闭Dashboard服务器吗？')) {
+                return;
+            }
+            try {
+                const response = await fetch('/api/shutdown', {
+                    method: 'POST'
+                });
+                const result = await response.text();
+                alert(result);
+                document.body.innerHTML = '<div style="text-align: center; padding: 50px;"><h2>Dashboard已关闭</h2></div>';
+            } catch (error) {
+                alert('关闭失败: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
