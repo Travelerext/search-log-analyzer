@@ -8,9 +8,14 @@
 </head>
 <body>
     <div class="top-nav">
-        <a href="/" class="active">主页</a>
-        <a href="/hbase">HBase查询</a>
-        <a href="/spark">Spark查询与分析</a>
+        <div class="nav-left">
+            <a href="/" class="active">主页</a>
+            <a href="/hbase">HBase查询</a>
+            <a href="/spark">Spark查询与分析</a>
+        </div>
+        <div class="nav-right">
+            <button class="shutdown-btn" onclick="shutdownServer()">关闭Dashboard</button>
+        </div>
     </div>
     <div class="container no-sidebar">
         <div class="main-content no-sidebar">
@@ -62,23 +67,25 @@
                 <div id="config-result" class="result"></div>
             </div>
 
-            <!-- Recent Operations Section -->
-            <div class="section" id="recent">
-                <h2>最近操作</h2>
-                <div id="recent-ops" class="result"></div>
+            <!-- Recent Operations and Terminal Side by Side -->
+            <div class="side-by-side">
+                <!-- Recent Operations Section -->
+                <div class="section" id="recent">
+                    <h2>最近操作</h2>
+                    <div id="recent-ops" class="result"></div>
+                </div>
+                <!-- Terminal Section -->
+                <div class="section terminal-section">
+                    <h2>终端信息</h2>
+                    <textarea id="terminal" readonly></textarea>
+                    <button onclick="clearTerminal()">清空终端</button>
+                </div>
             </div>
 
-            <!-- Shutdown button -->
-            <div class="section">
-                <button class="shutdown-btn" onclick="shutdownServer()">关闭Dashboard</button>
-            </div>
+
         </div>
     </div>
-    <div class="terminal-container">
-        <h2>终端信息</h2>
-        <textarea id="terminal" readonly></textarea>
-        <button onclick="clearTerminal()">清空终端</button>
-    </div>
+
 
     <script>
         function logToTerminal(message) {

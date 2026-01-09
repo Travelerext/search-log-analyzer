@@ -639,8 +639,8 @@ public class DashboardController {
                 }
             });
 
-            // 只返回最近20条记录
-            int limit = Math.min(20, allLogEntries.size());
+            // 只返回最近10条记录
+            int limit = Math.min(10, allLogEntries.size());
             List<String> recentOps = allLogEntries.subList(0, limit);
             
             // 格式化输出
