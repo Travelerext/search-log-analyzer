@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>搜狐搜索日志分析系统 - Dashboard</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <div class="top-nav">
+        <a href="/" class="active">主页</a>
+        <a href="/hbase">HBase查询</a>
+        <a href="/spark">Spark查询与分析</a>
+    </div>
+    <div class="container no-sidebar">
+        <div class="main-content no-sidebar">
+            <!-- Status Section -->
+            <div class="section" id="status">
+                <h2>系统状态</h2>
+                <button onclick="checkStatus()">检查系统状态</button>
+                <div id="status-result" class="result"></div>
+            </div>
+
+            <!-- Data Import Section -->
+            <div class="section" id="data-import">
+                <h2>数据导入</h2>
+                <div class="form-group">
+                    <label for="data-file">数据文件:</label>
+                    <input type="text" id="data-file" placeholder="/path/to/log.tsv">
+                </div>
+                <div class="form-group">
+                    <label for="load-zk-quorum">ZooKeeper地址:</label>
+                    <input type="text" id="load-zk-quorum" value="localhost">
+                </div>
+                <div class="form-group">
+                    <label for="load-zk-port">ZooKeeper端口:</label>
+                    <input type="text" id="load-zk-port" value="2181">
+                </div>
+                <button onclick="loadData()">加载数据</button>
+                <div id="load-result" class="result"></div>
+            </div>
+
+            <!-- Data Clean Section -->
+            <div class="section" id="data-clean">
+                <h2>数据清除</h2>
+                <button onclick="cleanData()">清空数据表</button>
+                <div id="clean-result" class="result"></div>
+            </div>
+
+            <!-- System Configuration Section -->
+            <div class="section" id="config">
+                <h2>系统配置</h2>
+                <div class="form-group">
+                    <label for="zk-address">ZooKeeper地址:</label>
+                    <input type="text" id="zk-address" value="localhost">
+                </div>
+                <div class="form-group">
+                    <label for="zk-port-config">ZooKeeper端口:</label>
+                    <input type="text" id="zk-port-config" value="2181">
+                </div>
+                <button onclick="saveConfig()">保存配置</button>
+                <div id="config-result" class="result"></div>
+            </div>
+
+            <!-- Recent Operations Section -->
+            <div class="section" id="recent">
+                <h2>最近操作</h2>
+                <div id="recent-ops" class="result"></div>
+            </div>
+
+            <!-- Shutdown button -->
+            <div class="section">
+                <button class="shutdown-btn" onclick="shutdownServer()">关闭Dashboard</button>
+            </div>
+        </div>
+    </div>
+    <div class="terminal-container">
+        <h2>终端信息</h2>
+        <textarea id="terminal" readonly></textarea>
+        <button onclick="clearTerminal()">清空终端</button>
+    </div>
+
+    <script>
+        function logToTerminal(message) {
+            const terminal = document.getElementById('terminal');
+            terminal.value += '[' + new Date().toLocaleTimeString() + '] ' + message + '\n';
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function clearTerminal() {
+            document.getElementById('terminal').value = '';
+        }
+        const taskOutputMap = new Map();
+
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const result = await response.text();
+                const monitorResponse = await fetch('/api/monitor/system');
+                const monitor = await monitorResponse.json();
+                let monitorHtml = '<br><strong>系统监控:</strong><br>';
+                monitorHtml += 'CPU使用率: ' + monitor.cpuUsage + '<br>';
+                monitorHtml += '总内存: ' + monitor.totalMemory + '<br>';
+                monitorHtml += '已用内存: ' + monitor.usedMemory + '<br>';
+                monitorHtml += '可用内存: ' + monitor.freeMemory + '<br>';
+                monitorHtml += '可用处理器: ' + monitor.availableProcessors + '<br>';
+                monitorHtml += '活跃任务: ' + monitor.activeTasks;
+                document.getElementById('status-result').innerHTML = '<span class="success">' + result + '</span>' + monitorHtml;
+            } catch (error) {
+                document.getElementById('status-result').innerHTML = '<span class="error">错误: ' + error.message + '</span>';
+            }
+        }
+
+        async function saveConfig() {
+            const zkAddress = document.getElementById('zk-address').value;
+            const zkPort = document.getElementById('zk-port-config').value;
+            // Simulate saving
+            logToTerminal('配置保存: ZooKeeper ' + zkAddress + ':' + zkPort);
+            document.getElementById('config-result').innerHTML = '<span class="success">配置已保存</span>';
+        }
+
+        async function loadRecentOps() {
+            const opsDiv = document.getElementById('recent-ops');
+            try {
+                const response = await fetch('/api/recent/operations');
+                const data = await response.json();
+                if (data.success && data.operations) {
+                    const ops = data.operations;
+                    if (ops.length === 0) {
+                        opsDiv.innerHTML = '<p>暂无操作记录</p>';
+                        return;
+                    }
+                    let html = '';
+                    ops.forEach(op => {
+                        const timestamp = op.timestamp || '';
+                        const type = op.type || '';
+                        const status = op.status || '';
+                        const details = op.details || '';
+                        
+                        let statusClass = '';
+                        let statusText = '';
+                        if (status === 'SUCCESS') {
+                            statusClass = 'success';
+                            statusText = '成功';
+                        } else if (status === 'START') {
+                            statusClass = 'success';
+                            statusText = '开始';
+                        } else if (status === 'FAILED' || status === 'ERROR') {
+                            statusClass = 'error';
+                            statusText = '失败';
+                        } else {
+                            statusClass = '';
+                            statusText = status;
+                        }
+                        
+                        html += '<div class="op-item">';
+                        html += `<strong>${timestamp}</strong> - ${type}: ${details}`;
+                        html += ` <span class="${statusClass}">${statusText}</span>`;
+                        html += '</div>';
+                    });
+                    opsDiv.innerHTML = html;
+                } else {
+                    opsDiv.innerHTML = '<span class="error">无法加载操作记录: ' + (data.error || '未知错误') + '</span>';
+                }
+            } catch (error) {
+                opsDiv.innerHTML = '<span class="error">加载操作记录失败: ' + error.message + '</span>';
+            }
+        }
+
+        // Load recent ops on page load
+        window.onload = loadRecentOps;
+
+        async function shutdownServer() {
+            if (!confirm('确定要关闭Dashboard服务器吗？')) {
+                return;
+            }
+            try {
+                const response = await fetch('/api/shutdown', {
+                    method: 'POST'
+                });
+                const result = await response.text();
+                alert(result);
+                document.body.innerHTML = '<div style="text-align: center; padding: 50px;"><h2>Dashboard已关闭</h2></div>';
+            } catch (error) {
+                alert('关闭失败: ' + error.message);
+            }
+        }
+
+        async function loadData() {
+            const filePath = document.getElementById('data-file').value;
+            const zkQuorum = document.getElementById('load-zk-quorum').value;
+            const zkPort = document.getElementById('load-zk-port').value;
+
+            if (!filePath) {
+                alert('请输入数据文件路径');
+                return;
+            }
+
+            const btn = event.target;
+            const resultDiv = document.getElementById('load-result');
+            btn.disabled = true;
+            btn.classList.add('btn-loading');
+            resultDiv.innerHTML = '';
+            try {
+                const response = await fetch('/api/data/load', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filePath: filePath,
+                        zkQuorum: zkQuorum,
+                        zkPort: zkPort
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    const taskId = data.taskId;
+                    resultDiv.innerHTML = '<span class="success">任务已启动，ID: ' + taskId + '</span><br><div class="progress-bar"><div class="progress-fill" id="progress-fill-' + taskId + '" style="width: 0%;"></div></div><div id="progress-text-' + taskId + '">准备中...</div>';
+                    pollTaskStatus(taskId, resultDiv);
+                } else {
+                    resultDiv.innerHTML = '<span class="error">错误: ' + data.error + '</span>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<span class="error">错误: ' + error.message + '</span>';
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('btn-loading');
+            }
+        }
+
+        async function cleanData() {
+            if (!confirm('确定要清空数据表吗？此操作不可逆！')) {
+                return;
+            }
+            const btn = event.target;
+            const resultDiv = document.getElementById('clean-result');
+            btn.disabled = true;
+            btn.classList.add('btn-loading');
+            resultDiv.innerHTML = '';
+            try {
+                const response = await fetch('/api/data/clean', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    const taskId = data.taskId;
+                    resultDiv.innerHTML = '<span class="success">任务已启动，ID: ' + taskId + '</span><br><div class="progress-bar"><div class="progress-fill" id="progress-fill-' + taskId + '" style="width: 0%;"></div></div><div id="progress-text-' + taskId + '">准备中...</div>';
+                    pollTaskStatus(taskId, resultDiv);
+                } else {
+                    resultDiv.innerHTML = '<span class="error">错误: ' + data.error + '</span>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<span class="error">错误: ' + error.message + '</span>';
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('btn-loading');
+            }
+        }
+
+        function pollTaskStatus(taskId, resultDiv) {
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/task/status/' + taskId);
+                    const task = await response.json();
+                    const progressText = document.getElementById('progress-text-' + taskId);
+                    const progressFill = document.getElementById('progress-fill-' + taskId);
+                    if (progressText) progressText.textContent = task.progress || task.status;
+                    if (progressFill) progressFill.style.width = task.progress || '0%';
+
+                    // 处理控制台输出
+                    if (task.output) {
+                        const previousOutput = taskOutputMap.get(taskId) || '';
+                        if (task.output.length > previousOutput.length) {
+                            const newOutput = task.output.slice(previousOutput.length);
+                            logToTerminal(newOutput);
+                            taskOutputMap.set(taskId, task.output);
+                        }
+                    }
+
+                    if (task.status === 'completed') {
+                        clearInterval(interval);
+                        resultDiv.innerHTML = '<span class="success">' + task.result + '</span>';
+                        logToTerminal(task.type + ': ' + task.result);
+                        taskOutputMap.delete(taskId);
+                    } else if (task.status === 'failed') {
+                        clearInterval(interval);
+                        resultDiv.innerHTML = '<span class="error">' + task.result + '</span>';
+                        taskOutputMap.delete(taskId);
+                    }
+                } catch (error) {
+                    clearInterval(interval);
+                    resultDiv.innerHTML = '<span class="error">查询任务状态失败: ' + error.message + '</span>';
+                }
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
