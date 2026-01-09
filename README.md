@@ -1,6 +1,26 @@
-# 搜狐搜索日志查询与统计分析系统
+# 搜索日志查询与统计分析系统
 
-基于HBase和Spark的搜狐用户搜索日志查询与统计分析系统，严格按照项目要求实现所有功能。
+基于HBase和Spark的用户搜索日志查询与统计分析系统，严格按照项目要求实现所有功能。
+
+## 目录
+
+- [系统要求](#系统要求)
+- [项目结构](#项目结构)
+- [数据格式](#数据格式)
+- [功能实现](#功能实现)
+  - [基于行键的搜索](#一基于行键的搜索)
+  - [HBase API条件查询功能](#二hbase-api条件查询功能)
+  - [Spark统计分析功能](#三spark统计分析功能)
+  - [数据加载功能](#四数据加载功能)
+  - [数据管理功能](#五数据管理功能)
+  - [MongoDB数据加载功能（可选）](#六mongodb数据加载功能可选)
+  - [图表生成功能（可选）](#七图表生成功能可选)
+- [快速开始](#快速开始)
+- [命令行参数说明](#命令行参数说明)
+- [功能示例](#功能示例)
+- [技术实现要点](#技术实现要点)
+- [注意事项](#注意事项)
+
 
 ## 系统要求
 - Java 8+
@@ -13,7 +33,7 @@
 ## 项目结构
 ```
 src/main/java/com/sohu/logs/
-├── SohuSearchLogProcessor.java   # 主程序入口
+├── MainApplication.java          # 主程序入口
 ├── DataLoader.java               # 数据加载器（从文件到HBase）
 ├── model/                        # 数据模型
 │   └── LogRecord.java            # 日志记录实体类
@@ -29,8 +49,23 @@ src/main/java/com/sohu/logs/
 │   ├── HBaseSchemaCreator.java   # 表结构创建
 │   ├── HBaseWriter.java          # 批量写入器
 │   └── HBaseCleaner.java         # 数据表清理
-└── spark/                        # Spark统计分析（已集成到主程序中）
-    # Spark分析现在直接在主程序中实现
+├── spark/                        # Spark统计分析
+│   └── SparkAnalysisService.java # Spark分析服务
+├── service/                      # 业务服务层
+│   ├── SearchService.java        # 搜索服务
+│   ├── DataLoadService.java      # 数据加载服务
+│   └── SparkSearchService.java   # Spark搜索服务
+├── cli/                          # 命令行界面
+│   ├── CommandLineParser.java     # 命令行参数解析
+│   └── MenuHandler.java          # 菜单处理器
+├── config/                       # 配置类
+│   └── AppConfig.java            # 应用配置
+└── web/                          # Web界面
+    └── DashboardController.java  # Web控制器
+
+src/main/resources/
+└── static/                       # 静态资源文件
+    └── index.html                # Web Dashboard页面
 ```
 
 ## 数据格式
@@ -163,12 +198,16 @@ src/main/java/com/sohu/logs/
 
 #### 使用可执行文件
 ```bash
-# 直接运行可执行文件（进入交互式菜单）
+# 直接运行程序启动Web Dashboard并显示交互菜单（默认端口9090）
 ./build/install/search-log-analyzer/bin/search-log-analyzer
 
 # 显示帮助信息
 ./build/install/search-log-analyzer/bin/search-log-analyzer help
 
+# 启动Web Dashboard（指定端口）
+./build/install/search-log-analyzer/bin/search-log-analyzer web 8080
+
+# 其他命令行功能（可选）
 # HBase交互式搜索模式
 ./build/install/search-log-analyzer/bin/search-log-analyzer search
 
@@ -187,7 +226,35 @@ src/main/java/com/sohu/logs/
 # 清空数据表
 ./build/install/search-log-analyzer/bin/search-log-analyzer clean
 ```
-### 4. 使用HBase查询功能
+### 4. 使用Web Dashboard
+
+Web Dashboard提供图形化界面进行系统操作，可以在新的终端窗口中启动：
+
+```bash
+# 在新终端窗口中启动Web Dashboard并显示交互菜单（默认端口9090）
+./build/install/search-log-analyzer/bin/search-log-analyzer web
+
+# 指定端口在新终端窗口中启动
+./build/install/search-log-analyzer/bin/search-log-analyzer web 8080
+
+# 只显示终端交互菜单（不启动Web服务器）
+./build/install/search-log-analyzer/bin/search-log-analyzer
+```
+
+启动后：
+- Web Dashboard将在新的终端窗口中运行，显示服务器日志
+- 在浏览器中访问显示的地址即可使用图形化界面
+- 同时在原终端中也可以使用交互菜单进行操作
+
+功能包括：
+- 系统状态检查
+- 行键精确查询
+- HBase条件查询
+- Spark条件查询
+- Spark统计分析
+- 数据加载和管理
+
+### 5. 使用HBase查询功能
 
 #### 交互式搜索模式
 ```bash
@@ -222,12 +289,7 @@ src/main/java/com/sohu/logs/
 程序支持以下命令行参数：
 
 ### 无参数
-显示交互式主菜单，包含五个主要功能选项：
-1. HBase交互式搜索
-2. HBase行键精确查询  
-3. Spark统计分析
-4. 数据加载到HBase
-5. 清空数据表
+启动Web Dashboard并显示交互式菜单，同时Web服务器在后台运行，提供图形化和命令行两种操作方式
 
 ### help / -h / --help
 显示帮助信息和使用示例。
@@ -271,6 +333,22 @@ src/main/java/com/sohu/logs/
 清空数据表所有数据。
 - `[truncate]`：可选的确认参数，输入"truncate"以执行清空
 - 示例：`clean` 或 `clean truncate`
+
+### web [port]
+启动Web Dashboard图形化界面。
+- `[port]`：可选的端口号，默认9090
+- 示例：`web` 或 `web 8080`
+
+### sparksearch <搜索条件> [ZooKeeper地址] [ZooKeeper端口] [是否显示详情]
+使用Spark进行条件查询（从HBase读取数据）。
+- `<搜索条件>`：搜索条件字符串，格式与HBase条件查询相同
+- `[ZooKeeper地址]`：HBase ZooKeeper地址，默认localhost
+- `[ZooKeeper端口]`：HBase ZooKeeper端口，默认2181
+- `[是否显示详情]`：是否显示详细结果，true/false，默认true
+- 示例：`sparksearch "time:00:00:00|01:00:00 + user:user1" localhost 2181 true`
+
+### retry
+重试未完成的任务（如数据加载失败的任务）。
 
 ## 功能示例
 
@@ -330,6 +408,17 @@ src/main/java/com/sohu/logs/
 ./search-log-analyzer stats 00:00:00 12:00:00 morning_stats 192.168.1.100 2181
 ```
 
+#### 5. Web Dashboard
+```bash
+# 直接运行程序启动Web Dashboard（默认端口9090）
+./search-log-analyzer
+
+# 或者指定自定义端口
+./search-log-analyzer web 8080
+
+# 然后在浏览器中访问显示的地址
+```
+
 ### Spark统计输出
 统计分析将生成以下结果文件（按时间戳组织）：
 - `yyyyMMdd_HHmmss/query_statistics/` : 查询词搜索次数统计
@@ -383,6 +472,13 @@ src/main/java/com/sohu/logs/
 - 智能分组：数据过多时自动分组显示（前8条+其他）
 - 中文支持：自动处理中文字体，防止乱码
 - 灵活配置：可通过参数控制是否生成图表
+
+### 7. Web Dashboard系统
+- 轻量级Web框架：使用Javalin提供RESTful API
+- 图形化界面：提供直观的Web界面进行系统操作
+- 静态资源管理：HTML/CSS/JS文件存放于resources/static目录
+- 实时交互：支持搜索、分析、数据管理等功能
+- 响应式设计：适配不同屏幕尺寸的设备
 
 ### 7. 中文支持
 - 所有界面提示信息使用中文

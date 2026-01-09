@@ -6,6 +6,8 @@ import io.javalin.http.staticfiles.Location;
 import com.sohu.logs.service.*;
 import com.sohu.logs.search.SearchCondition;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jspecify.annotations.NonNull;
+
 import java.io.File;
 import java.nio.file.*;
 import java.util.*;
@@ -51,6 +53,79 @@ public class DashboardController {
         public void appendOutput(String text) { output.append(text); }
         public long getCreatedAt() { return createdAt; }
         public long getUpdatedAt() { return updatedAt; }
+    }
+
+    /**
+     * Utility class for capturing console output during synchronous operations
+     */
+    private static class ConsoleOutputCapture implements AutoCloseable {
+        private final java.io.PrintStream originalOut;
+        private final java.io.PrintStream originalErr;
+        private final java.io.ByteArrayOutputStream buffer;
+        private final java.io.PrintStream outTeeStream;
+        private final java.io.PrintStream errTeeStream;
+
+        public ConsoleOutputCapture() {
+            this.originalOut = System.out;
+            this.originalErr = System.err;
+            this.buffer = new java.io.ByteArrayOutputStream();
+
+            this.outTeeStream = new java.io.PrintStream(new java.io.OutputStream() {
+                @Override
+                public void write(int b) {
+                    originalOut.write(b);
+                    buffer.write(b);
+                }
+                
+                @Override
+                public void write(byte @NonNull [] b, int off, int len) {
+                    originalOut.write(b, off, len);
+                    buffer.write(b, off, len);
+                }
+                
+                @Override
+                public void flush() {
+                    originalOut.flush();
+                }
+            });
+            
+            // Create tee output stream for System.err
+            this.errTeeStream = new java.io.PrintStream(new java.io.OutputStream() {
+                @Override
+                public void write(int b) {
+                    originalErr.write(b);
+                    buffer.write(b);
+                }
+                
+                @Override
+                public void write(byte @NonNull [] b, int off, int len) {
+                    originalErr.write(b, off, len);
+                    buffer.write(b, off, len);
+                }
+                
+                @Override
+                public void flush() {
+                    originalErr.flush();
+                }
+            });
+            
+            System.setOut(outTeeStream);
+            System.setErr(errTeeStream);
+        }
+        
+        public String getCapturedOutput() {
+            outTeeStream.flush();
+            errTeeStream.flush();
+            return buffer.toString();
+        }
+        
+        @Override
+        public void close() {
+            System.setOut(originalOut);
+            System.setErr(originalErr);
+            outTeeStream.close();
+            errTeeStream.close();
+        }
     }
 
     private final Javalin app;
@@ -208,7 +283,7 @@ public class DashboardController {
 
     private void searchByRowKey(Context ctx) {
         Map<String, Object> response = new HashMap<>();
-        try {
+        try (ConsoleOutputCapture capture = new ConsoleOutputCapture()) {
             Map<String, String> request = objectMapper.readValue(ctx.body(), Map.class);
             String rowkey = request.get("rowkey");
             if (rowkey == null || rowkey.isEmpty()) {
@@ -241,6 +316,11 @@ public class DashboardController {
                 sb.append("  域名: ").append(result.get("domain")).append("\n");
                 response.put("data", sb.toString());
             }
+            // 添加控制台输出到响应
+            String consoleOutput = capture.getCapturedOutput();
+            if (consoleOutput != null && !consoleOutput.isEmpty()) {
+                response.put("consoleOutput", consoleOutput);
+            }
             ctx.json(response);
         } catch (Exception e) {
             response.put("success", false);
@@ -251,7 +331,7 @@ public class DashboardController {
 
     private void searchByCondition(Context ctx) {
         Map<String, Object> response = new HashMap<>();
-        try {
+        try (ConsoleOutputCapture capture = new ConsoleOutputCapture()) {
             Map<String, String> request = objectMapper.readValue(ctx.body(), Map.class);
             String conditionStr = request.get("condition");
             if (conditionStr == null || conditionStr.isEmpty()) {
@@ -271,12 +351,11 @@ public class DashboardController {
             } else {
                 String message = "查询成功，找到 " + results.size() + " 条记录";
                 response.put("message", message);
-                // 构建格式化文本输出，兼容前端
                 StringBuilder sb = new StringBuilder();
                 sb.append("=== HBase条件查询 ===\n");
                 sb.append("查询条件: ").append(condition).append("\n");
                 sb.append("找到 ").append(results.size()).append(" 条记录\n");
-                if (results.size() > 0) {
+                if (!results.isEmpty()) {
                     sb.append("\n前").append(Math.min(10, results.size())).append("条记录:\n");
                     int limit = Math.min(10, results.size());
                     for (int i = 0; i < limit; i++) {
@@ -297,6 +376,11 @@ public class DashboardController {
                 response.put("data", sb.toString());
             }
             response.put("results", results);
+            // 添加控制台输出到响应
+            String consoleOutput = capture.getCapturedOutput();
+            if (consoleOutput != null && !consoleOutput.isEmpty()) {
+                response.put("consoleOutput", consoleOutput);
+            }
             ctx.json(response);
         } catch (Exception e) {
             response.put("success", false);
@@ -307,7 +391,7 @@ public class DashboardController {
 
     private void sparkSearch(Context ctx) {
         Map<String, Object> response = new HashMap<>();
-        try {
+        try (ConsoleOutputCapture capture = new ConsoleOutputCapture()) {
             Map<String, String> request = objectMapper.readValue(ctx.body(), Map.class);
             String conditionStr = request.get("condition");
             if (conditionStr == null || conditionStr.isEmpty()) {
@@ -329,12 +413,11 @@ public class DashboardController {
             } else {
                 String message = "查询成功，找到 " + results.size() + " 条记录";
                 response.put("message", message);
-                // 构建格式化文本输出，兼容前端
                 StringBuilder sb = new StringBuilder();
                 sb.append("=== Spark条件查询 ===\n");
                 sb.append("查询条件: ").append(condition).append("\n");
                 sb.append("找到 ").append(results.size()).append(" 条记录\n");
-                if (results.size() > 0) {
+                if (!results.isEmpty()) {
                     sb.append("\n前").append(Math.min(10, results.size())).append("条记录:\n");
                     int limit = Math.min(10, results.size());
                     for (int i = 0; i < limit; i++) {
@@ -354,6 +437,11 @@ public class DashboardController {
                 response.put("data", sb.toString());
             }
             response.put("results", results);
+            // 添加控制台输出到响应
+            String consoleOutput = capture.getCapturedOutput();
+            if (consoleOutput != null && !consoleOutput.isEmpty()) {
+                response.put("consoleOutput", consoleOutput);
+            }
             ctx.json(response);
         } catch (Exception e) {
             response.put("success", false);
@@ -386,12 +474,12 @@ public class DashboardController {
                     java.io.PrintStream oldErr = System.err;
                     java.io.PrintStream teePrintStream = new java.io.PrintStream(new java.io.OutputStream() {
                         @Override
-                        public void write(int b) throws java.io.IOException {
+                        public void write(int b) {
                             oldOut.write(b);
                             task.appendOutput(String.valueOf((char)b));
                         }
                         @Override
-                        public void write(byte[] b, int off, int len) throws java.io.IOException {
+                        public void write(byte @NonNull [] b, int off, int len) {
                             oldOut.write(b, off, len);
                             task.appendOutput(new String(b, off, len));
                         }
@@ -401,7 +489,6 @@ public class DashboardController {
                     try {
                         task.setProgress("执行Spark分析...");
                         analysisService.executeSparkAnalysisCommandLine(startTime, endTime, outputDir, zkQuorum, zkPort, true);
-                        // Generate timestamp matching SparkAnalysisService
                         String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
                         String baseOutputDir = outputDir + "/" + timestamp;
                         String resultMessage = String.format("分析完成，结果保存在: %s (时间范围: %s 至 %s)", 
@@ -459,12 +546,12 @@ public class DashboardController {
                     java.io.PrintStream oldErr = System.err;
                     java.io.PrintStream teePrintStream = new java.io.PrintStream(new java.io.OutputStream() {
                         @Override
-                        public void write(int b) throws java.io.IOException {
+                        public void write(int b) {
                             oldOut.write(b);
                             task.appendOutput(String.valueOf((char)b));
                         }
                         @Override
-                        public void write(byte[] b, int off, int len) throws java.io.IOException {
+                        public void write(byte @NonNull [] b, int off, int len) {
                             oldOut.write(b, off, len);
                             task.appendOutput(new String(b, off, len));
                         }
@@ -517,12 +604,12 @@ public class DashboardController {
                     java.io.PrintStream oldErr = System.err;
                     java.io.PrintStream teePrintStream = new java.io.PrintStream(new java.io.OutputStream() {
                         @Override
-                        public void write(int b) throws java.io.IOException {
+                        public void write(int b) {
                             oldOut.write(b);
                             task.appendOutput(String.valueOf((char)b));
                         }
                         @Override
-                        public void write(byte[] b, int off, int len) throws java.io.IOException {
+                        public void write(byte @NonNull [] b, int off, int len) {
                             oldOut.write(b, off, len);
                             task.appendOutput(new String(b, off, len));
                         }
@@ -661,7 +748,7 @@ public class DashboardController {
                     op.put("taskId", parts[1]);
                     op.put("status", parts[2]);
                     op.put("type", parts[3]);
-                    op.put("details", parts.length == 5 ? parts[4] : "");
+                    op.put("details", "");
                     formattedOps.add(op);
                 }
             }

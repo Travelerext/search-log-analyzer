@@ -28,7 +28,7 @@ public class MenuHandler {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         
         System.out.println("==========================================");
-        System.out.println("      搜狐搜索日志查询与统计分析系统");
+        System.out.println("      搜索日志查询与统计分析系统");
         System.out.println("==========================================");
         
         while (true) {
@@ -77,15 +77,15 @@ public class MenuHandler {
                 case "7":
                     retryIncompleteTasks();
                     break;
-                case "8":
-                    sparkSearchService.executeInteractiveSearch();
-                    break;
-                case "0":
-                    System.out.println("感谢使用，再见！");
-                    cleanup();
-                    return;
-                default:
-                    System.out.println("无效选择，请输入0-8之间的数字");
+                  case "8":
+                      sparkSearchService.executeInteractiveSearch();
+                      break;
+                  case "0":
+                     System.out.println("感谢使用，再见！");
+                     cleanup();
+                     return;
+                 default:
+                     System.out.println("无效选择，请输入0-8之间的数字");
                     continue;
             }
             
@@ -93,7 +93,7 @@ public class MenuHandler {
             safeReadLine(reader);
         }
     }
-    
+
     private void cleanup() {
         searchService.cleanup();
         dataLoadService.cleanup();
@@ -280,7 +280,7 @@ public class MenuHandler {
     }
     
     public static void printUsage() {
-        System.out.println("搜狐搜索日志查询与统计分析系统");
+        System.out.println("搜索日志查询与统计分析系统");
         System.out.println("用法:");
         System.out.println("  无参数                 - 显示交互式主菜单");
         System.out.println("  help                  - 显示此帮助信息");

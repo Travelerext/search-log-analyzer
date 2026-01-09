@@ -102,7 +102,7 @@ public class DataLoadService {
         } catch (Exception e) {
             System.err.println("数据加载失败: " + e.getMessage());
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("数据加载失败: " + e.getMessage(), e);
         }
     }
     
@@ -179,7 +179,7 @@ public class DataLoadService {
         } catch (Exception e) {
             System.err.println("数据加载失败: " + e.getMessage());
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("数据加载失败: " + e.getMessage(), e);
         }
     }
     
@@ -243,19 +243,19 @@ public class DataLoadService {
             TaskLogger.logTaskFailure(taskId, "CLEAN_TABLE", error + " " + e.getMessage());
             System.err.println(error);
             System.err.println("错误详情: " + e.getMessage());
-            System.exit(1);
+            throw new RuntimeException(error, e);
         } catch (java.net.ConnectException e) {
             String error = "连接被拒绝，请确保ZooKeeper (" + AppConfig.get("hbase.zookeeper.quorum") + 
                          ":" + AppConfig.get("hbase.zookeeper.property.clientPort") + ") 和HBase正在运行。";
             TaskLogger.logTaskFailure(taskId, "CLEAN_TABLE", error + " " + e.getMessage());
             System.err.println(error);
             System.err.println("错误详情: " + e.getMessage());
-            System.exit(1);
+            throw new RuntimeException(error, e);
         } catch (Exception e) {
             TaskLogger.logTaskFailure(taskId, "CLEAN_TABLE", e.getMessage());
             System.err.println("清除数据失败: " + e.getMessage());
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("清除数据失败: " + e.getMessage(), e);
         }
     }
     

@@ -48,18 +48,22 @@ public class CommandLineParser {
                 if (args.length >= 6) params.put("encoding", args[5]);
                 break;
                 
-            case "mongoload":
-                if (args.length >= 2) params.put("filePath", args[1]);
-                if (args.length >= 3) params.put("connectionString", args[2]);
-                if (args.length >= 4) params.put("batchSize", args[3]);
-                if (args.length >= 5) params.put("encoding", args[4]);
-                break;
-                
-            case "retry":
-                if (args.length >= 2) params.put("taskId", args[1]);
-                break;
-                
-            case "help":
+             case "mongoload":
+                 if (args.length >= 2) params.put("filePath", args[1]);
+                 if (args.length >= 3) params.put("connectionString", args[2]);
+                 if (args.length >= 4) params.put("batchSize", args[3]);
+                 if (args.length >= 5) params.put("encoding", args[4]);
+                 break;
+
+             case "web":
+                 if (args.length >= 2) params.put("port", args[1]);
+                 break;
+
+             case "retry":
+                 if (args.length >= 2) params.put("taskId", args[1]);
+                 break;
+
+             case "help":
             case "-h":
             case "--help":
                 return new Command("help", params);

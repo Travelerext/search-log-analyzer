@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spark查询与分析 - 搜狐搜索日志分析系统</title>
+    <title>Spark查询与分析 - 搜索日志分析系统</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -19,6 +19,7 @@
 <body>
     <div class="top-nav">
         <div class="nav-left">
+            <span class="brand-name">搜索日志分析Dashboard</span>
             <a href="/">主页</a>
             <a href="/hbase">HBase查询</a>
             <a href="/spark" class="active">Spark查询与分析</a>
@@ -34,7 +35,6 @@
             <a class="sidebar-btn" data-section="spark-analysis-section">Spark统计分析</a>
         </div>
         <div class="main-content">
-            <!-- Spark Search Section -->
             <div class="section active" id="spark-search-section">
                 <h2>Spark条件查询</h2>
                 <div class="section-content">
@@ -46,12 +46,11 @@
                     </div>
                     <div class="action-panel">
                         <button onclick="sparkSearch()">查询</button>
-                        <div id="spark-result" class="result"></div>
                     </div>
                 </div>
+                <div id="spark-result" class="result"></div>
             </div>
 
-            <!-- Spark Analysis Section -->
             <div class="section" id="spark-analysis-section">
                 <h2>Spark统计分析</h2>
                 <div class="section-content">
@@ -79,11 +78,11 @@
                     </div>
                     <div class="action-panel">
                         <button onclick="runAnalysis()">执行分析</button>
-                        <div id="analysis-result" class="result"></div>
-                        <div class="chart-container" id="chart-container" style="display: none;">
-                            <canvas id="analysisChart"></canvas>
-                        </div>
                     </div>
+                </div>
+                <div id="analysis-result" class="result"></div>
+                <div class="chart-container" id="chart-container" style="display: none;">
+                    <canvas id="analysisChart"></canvas>
                 </div>
             </div>
         </div>
@@ -97,7 +96,6 @@
     <script>
         let chart = null;
 
-          // 全局变量存储Spark查询结果和分页状态
           let sparkResults = [];
           let sparkCurrentPage = 1;
           let sparkPageSize = 20;
@@ -123,14 +121,15 @@
                    });
                    const data = await response.json();
                    if (data.success) {
-                       logToTerminal('Spark条件查询完成: ' + condition);
-                        
-                       // 存储结果
+                        logToTerminal('Spark条件查询完成: ' + condition);
+                        if (data.consoleOutput) {
+                            logToTerminal(data.consoleOutput);
+                        }
+
                        sparkResults = data.results || [];
                        sparkTotalResults = data.count || 0;
                        sparkCurrentPage = 1;
-                       
-                       // 显示结果
+
                        displaySparkResults();
                        
                        logToTerminal('Spark条件查询结果: 找到 ' + data.count + ' 条记录');
@@ -161,8 +160,7 @@
                    resultDiv.innerHTML = html;
                    return;
                }
-               
-               // 计算分页
+
                const totalPages = Math.ceil(sparkResults.length / sparkPageSize);
                const startIndex = (sparkCurrentPage - 1) * sparkPageSize;
                const endIndex = Math.min(startIndex + sparkPageSize, sparkResults.length);
@@ -197,13 +195,11 @@
                
                html += '</tbody></table>';
                
-               // 分页器
                if (totalPages > 1) {
                    html += '<div class="pagination">';
                    html += '<button onclick="changeSparkPage(1)" ' + (sparkCurrentPage === 1 ? 'disabled' : '') + '>«</button>';
                    html += '<button onclick="changeSparkPage(' + (sparkCurrentPage - 1) + ')" ' + (sparkCurrentPage === 1 ? 'disabled' : '') + '>‹</button>';
-                   
-                   // 显示页码
+
                    const startPage = Math.max(1, sparkCurrentPage - 2);
                    const endPage = Math.min(totalPages, startPage + 4);
                    
@@ -293,7 +289,6 @@
         }
 
         function displayChart(resultText) {
-            // Simple parsing: assume result has lines like "Key: Value"
             const lines = resultText.split('\n');
             const data = {};
             lines.forEach(line => {
@@ -343,7 +338,6 @@
                     if (progressText) progressText.textContent = task.progress || task.status;
                     if (progressFill) progressFill.style.width = task.progress || '0%';
 
-                    // 处理控制台输出
                     if (task.output) {
                         const previousOutput = taskOutputMap.get(taskId) || '';
                         if (task.output.length > previousOutput.length) {
@@ -369,7 +363,7 @@
                     clearInterval(interval);
                     resultDiv.innerHTML = '<span class="error">查询任务状态失败: ' + error.message + '</span>';
                 }
-            }, 2000); // Poll every 2 seconds
+            }, 2000);
         }
 
          const taskOutputMap = new Map();
@@ -386,24 +380,19 @@
              return div.innerHTML;
          }
 
-        // Sidebar navigation
         document.addEventListener('DOMContentLoaded', function() {
             const sidebarButtons = document.querySelectorAll('.sidebar-btn');
-            
-            // Function to switch section
+
             function switchSection(sectionId) {
-                // Hide all sections
                 document.querySelectorAll('.section').forEach(section => {
                     section.classList.remove('active');
                 });
-                
-                // Show selected section
+
                 const selectedSection = document.getElementById(sectionId);
                 if (selectedSection) {
                     selectedSection.classList.add('active');
                 }
-                
-                // Update active button
+
                 sidebarButtons.forEach(btn => {
                     btn.classList.remove('active');
                     if (btn.getAttribute('data-section') === sectionId) {
@@ -411,16 +400,14 @@
                     }
                 });
             }
-            
-            // Add click event to sidebar buttons
+
             sidebarButtons.forEach(btn => {
                 btn.addEventListener('click', function() {
                     const sectionId = this.getAttribute('data-section');
                     switchSection(sectionId);
                 });
             });
-            
-            // Initialize with first section active
+
             if (sidebarButtons.length > 0) {
                 const firstSectionId = sidebarButtons[0].getAttribute('data-section');
                 switchSection(firstSectionId);

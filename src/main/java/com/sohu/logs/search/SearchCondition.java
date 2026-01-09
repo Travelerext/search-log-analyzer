@@ -14,6 +14,7 @@ public class SearchCondition {
     private List<String> userIds;
     private List<String> queryKeywords;
     private List<String> domainKeywords;
+    private List<String> urlKeywords;
     private Integer minRank;
     private Integer maxRank;
     private Integer minClickOrder;
@@ -43,6 +44,8 @@ public class SearchCondition {
             parseQueryKeywords(part.substring(6), condition);
         } else if (part.startsWith("domain:")) {
             parseDomainKeywords(part.substring(7), condition);
+        } else if (part.startsWith("url:")) {
+            parseUrlKeywords(part.substring(4), condition);
         } else if (part.startsWith("rank:")) {
             parseRankRange(part.substring(5), condition);
         } else if (part.startsWith("click:")) {
@@ -70,6 +73,10 @@ public class SearchCondition {
     
     private static void parseDomainKeywords(String domainStr, SearchCondition condition) {
         condition.domainKeywords = Arrays.asList(domainStr.split("\\|"));
+    }
+
+    private static void parseUrlKeywords(String urlStr, SearchCondition condition) {
+        condition.urlKeywords = Arrays.asList(urlStr.split("\\|"));
     }
     
     private static void parseRankRange(String rankStr, SearchCondition condition) {
@@ -125,6 +132,10 @@ public class SearchCondition {
     public boolean hasDomainKeywords() {
         return domainKeywords != null && !domainKeywords.isEmpty();
     }
+
+    public boolean hasUrlKeywords() {
+        return urlKeywords != null && !urlKeywords.isEmpty();
+    }
     
     public boolean hasRankRange() {
         return minRank != null && maxRank != null;
@@ -160,6 +171,10 @@ public class SearchCondition {
     
     public List<String> getDomainKeywords() {
         return domainKeywords != null ? domainKeywords : new ArrayList<>();
+    }
+
+    public List<String> getUrlKeywords() {
+        return urlKeywords != null ? urlKeywords : new ArrayList<>();
     }
     
     public Integer getMinRank() {
@@ -203,6 +218,9 @@ public class SearchCondition {
         if (hasDomainKeywords()) {
             sb.append("域名关键词: ").append(domainKeywords).append("; ");
         }
+        if (hasUrlKeywords()) {
+            sb.append("URL关键词: ").append(urlKeywords).append("; ");
+        }
         if (hasRankRange()) {
             sb.append("排名范围: ").append(minRank).append("-").append(maxRank).append("; ");
         }
@@ -228,6 +246,10 @@ public class SearchCondition {
         if (hasDomainKeywords()) {
             if (sb.length() > 0) sb.append("+");
             sb.append("domain:").append(String.join("|", domainKeywords));
+        }
+        if (hasUrlKeywords()) {
+            if (sb.length() > 0) sb.append("+");
+            sb.append("url:").append(String.join("|", urlKeywords));
         }
         if (hasRankRange()) {
             if (sb.length() > 0) sb.append("+");

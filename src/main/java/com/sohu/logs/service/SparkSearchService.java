@@ -27,6 +27,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 public class SparkSearchService {
     private static final String TABLE_NAME = "search_logs";
@@ -38,7 +39,7 @@ public class SparkSearchService {
         
         System.out.println("请输入搜索条件，格式参考使用说明。");
         System.out.println("示例: time:00:00:00|01:00:00 + user:user1|user2 + query:旅游|美食");
-        System.out.println("       domain:sohu|baidu + rank:1-10 + click:1-3");
+        System.out.println("       domain:sohu|baidu + url:example.com|news.sohu.com + rank:1-10 + click:1-3");
         System.out.println("使用 '+' 组合多个条件，输入 'exit' 退出");
         
         while (true) {
@@ -63,6 +64,7 @@ public class SparkSearchService {
                 System.err.println("  user:user1|user2");
                 System.err.println("  query:旅游|美食");
                 System.err.println("  domain:sohu|baidu");
+                System.err.println("  url:example.com|news.sohu.com");
                 System.err.println("  rank:1-10");
                 System.err.println("  click:1-3");
                 System.err.println("使用 '+' 组合多个条件: time:... + user:...");
@@ -256,6 +258,16 @@ public class SparkSearchService {
             }
             whereClause.append(")");
         }
+
+        if (condition.hasUrlKeywords()) {
+            List<String> keywords = condition.getUrlKeywords();
+            whereClause.append(" AND (");
+            for (int i = 0; i < keywords.size(); i++) {
+                if (i > 0) whereClause.append(" OR ");
+                whereClause.append("url LIKE '%").append(keywords.get(i)).append("%'");
+            }
+            whereClause.append(")");
+        }
         
         if (condition.hasRankRange()) {
             whereClause.append(" AND rank >= ").append(condition.getMinRank());
@@ -284,6 +296,62 @@ public class SparkSearchService {
             System.out.println("设置时间范围扫描: startRow=00|" + reverseStart + ", stopRow=16|" + reverseEnd);
         } catch (Exception e) {
             System.err.println("设置时间范围扫描失败: " + e.getMessage());
+        }
+    }
+    
+    public List<Map<String, Object>> executeSparkSearchAsList(SearchCondition condition, String zkQuorum, String zkPort) throws Exception {
+        System.setProperty("java.awt.headless", "true");
+        
+        Configuration hbaseConf = HBaseConfiguration.create();
+        hbaseConf.set("hbase.zookeeper.quorum", zkQuorum);
+        hbaseConf.set("hbase.zookeeper.property.clientPort", zkPort);
+        
+        SparkConf sparkConf = new SparkConf()
+            .setAppName("Spark-Search-" + AppConfig.get("spark.app.name"))
+            .setMaster(AppConfig.get("spark.master"))
+            .set("spark.driver.host", "localhost")
+            .set("spark.driver.bindAddress", "127.0.0.1")
+            .set("spark.sql.legacy.timeParserPolicy", "LEGACY");
+        
+        try (JavaSparkContext sc = new JavaSparkContext(sparkConf);
+             SparkSession spark = SparkSession.builder().sparkContext(sc.sc()).getOrCreate();
+             Connection conn = ConnectionFactory.createConnection(hbaseConf)) {
+            
+            List<Row> rows = readDataFromHBase(conn, condition);
+
+            if (rows.isEmpty()) {
+                return new java.util.ArrayList<>();
+            }
+
+            Dataset<Row> searchLogsDF = spark.createDataFrame(rows,
+                DataTypes.createStructType(Arrays.asList(
+                    DataTypes.createStructField("access_time", DataTypes.StringType, true),
+                    DataTypes.createStructField("user_id", DataTypes.StringType, true),
+                    DataTypes.createStructField("query", DataTypes.StringType, true),
+                    DataTypes.createStructField("rank", DataTypes.IntegerType, true),
+                    DataTypes.createStructField("click_order", DataTypes.IntegerType, true),
+                    DataTypes.createStructField("url", DataTypes.StringType, true),
+                    DataTypes.createStructField("domain", DataTypes.StringType, true)
+                )));
+
+            searchLogsDF.createOrReplaceTempView("search_logs");
+
+            Dataset<Row> filteredDF = applySearchFilters(spark, condition);
+            
+            List<Map<String, Object>> results = new java.util.ArrayList<>();
+            List<Row> resultRows = filteredDF.collectAsList();
+            for (Row row : resultRows) {
+                Map<String, Object> map = new java.util.HashMap<>();
+                map.put("accessTime", row.getAs("access_time"));
+                map.put("userId", row.getAs("user_id"));
+                map.put("query", row.getAs("query"));
+                map.put("rank", row.getAs("rank"));
+                map.put("clickOrder", row.getAs("click_order"));
+                map.put("url", row.getAs("url"));
+                map.put("domain", row.getAs("domain"));
+                results.add(map);
+            }
+            return results;
         }
     }
     

@@ -51,7 +51,11 @@ dependencies {
     // Chart libraries
     implementation 'org.jfree:jfreechart:1.5.3'
     implementation 'org.jfree:jcommon:1.0.24'
-    
+
+    // Web framework (lightweight, Java 8 compatible)
+    implementation 'io.javalin:javalin:3.13.6'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.13.5'
+
 }
 
 application {

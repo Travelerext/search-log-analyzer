@@ -15,6 +15,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.List;
+import java.util.Map;
 
 public class SearchService {
     private static final Logger log = LoggerFactory.getLogger(SearchService.class);
@@ -67,21 +68,22 @@ public class SearchService {
         try (Connection conn = ConnectionFactory.createConnection(conf)) {
             searchByRowKey(conn, rowKey);
         } catch (org.apache.hadoop.hbase.client.RetriesExhaustedException e) {
-            System.err.println("无法连接到HBase，请检查HBase服务是否已启动。");
-            System.err.println("错误详情: " + e.getMessage());
-            System.exit(1);
+            String error = "无法连接到HBase，请检查HBase服务是否已启动。错误详情: " + e.getMessage();
+            System.err.println(error);
+            throw new RuntimeException(error, e);
         } catch (java.net.ConnectException e) {
-            System.err.println("连接被拒绝，请确保ZooKeeper (" + AppConfig.get("hbase.zookeeper.quorum") + 
-                             ":" + AppConfig.get("hbase.zookeeper.property.clientPort") + ") 和HBase正在运行。");
-            System.err.println("错误详情: " + e.getMessage());
-            System.exit(1);
+            String error = "连接被拒绝，请确保ZooKeeper (" + AppConfig.get("hbase.zookeeper.quorum") + 
+                             ":" + AppConfig.get("hbase.zookeeper.property.clientPort") + ") 和HBase正在运行。错误详情: " + e.getMessage();
+            System.err.println(error);
+            throw new RuntimeException(error, e);
         } catch (Exception e) {
-            System.err.println("行键查询失败: " + e.getMessage());
+            String error = "行键查询失败: " + e.getMessage();
+            System.err.println(error);
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException(error, e);
         }
     }
-    
+
     private void interactiveSearch(Connection conn) {
         SearchEngine searchEngine = new SearchEngine(conn, redisCache);
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
@@ -111,6 +113,7 @@ public class SearchService {
                 System.err.println("  user:user1|user2");
                 System.err.println("  query:旅游|美食");
                 System.err.println("  domain:sohu|baidu");
+                System.err.println("  url:example.com|news.sohu.com");
                 System.err.println("  rank:1-10");
                 System.err.println("  click:1-3");
                 System.err.println("使用 '+' 组合多个条件: time:... + user:...");
@@ -150,7 +153,7 @@ public class SearchService {
             SearchEngine.printResult(result);
         }
     }
-    
+
     private String safeReadLine(BufferedReader reader) {
         try {
             String line = reader.readLine();
@@ -160,6 +163,51 @@ public class SearchService {
             return line.trim();
         } catch (IOException e) {
             return "";
+        }
+    }
+    
+    public Map<String, Object> searchRowKeyAsMap(String rowKey) {
+        Configuration conf = AppConfig.createHBaseConfiguration();
+        try (Connection conn = ConnectionFactory.createConnection(conf)) {
+            SearchEngine searchEngine = new SearchEngine(conn);
+            log.info("执行行键查询: {}", rowKey);
+            Result result = searchEngine.getByRowKey(rowKey);
+            log.info("行键查询结果是否为空: {}", result.isEmpty());
+            if (result.isEmpty()) {
+                return null;
+            } else {
+                Map<String, Object> map = SearchEngine.resultToMap(result);
+                log.info("成功转换行键结果: {}", map);
+                return map;
+            }
+        } catch (Exception e) {
+            log.error("行键查询失败", e);
+            throw new RuntimeException("行键查询失败: " + e.getMessage(), e);
+        }
+    }
+    
+    public List<Map<String, Object>> searchConditionAsList(SearchCondition condition) {
+        Configuration conf = AppConfig.createHBaseConfiguration();
+        try (Connection conn = ConnectionFactory.createConnection(conf)) {
+            SearchEngine searchEngine = new SearchEngine(conn, redisCache);
+            log.info("执行条件查询: {}", condition);
+            List<Result> results = searchEngine.search(condition);
+            log.info("从HBase获取到 {} 条原始结果", results.size());
+            
+            List<Map<String, Object>> list = new java.util.ArrayList<>();
+            for (Result result : results) {
+                try {
+                    Map<String, Object> map = SearchEngine.resultToMap(result);
+                    list.add(map);
+                } catch (Exception e) {
+                    log.error("转换单条结果时出错", e);
+                }
+            }
+            log.info("成功转换 {} 条结果到Map", list.size());
+            return list;
+        } catch (Exception e) {
+            log.error("条件查询失败", e);
+            throw new RuntimeException("条件查询失败: " + e.getMessage(), e);
         }
     }
     

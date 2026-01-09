@@ -3,13 +3,28 @@ package com.sohu.logs;
 import com.sohu.logs.cli.CommandLineParser;
 import com.sohu.logs.cli.MenuHandler;
 import com.sohu.logs.service.*;
+import com.sohu.logs.web.DashboardController;
 
 public class MainApplication {
 
     public static void main(String[] args) {
         try {
+            // Handle direct dashboard startup
+            if (args.length > 0 && args[0].equals("dashboard")) {
+                int port = 8080;
+                if (args.length > 1) {
+                    try {
+                        port = Integer.parseInt(args[1]);
+                    } catch (NumberFormatException e) {
+                        System.err.println("错误: 端口号无效，使用默认端口8080");
+                    }
+                }
+                startWebDashboard(port);
+                return;
+            }
+
             CommandLineParser.Command command = CommandLineParser.parse(args);
-            
+
             switch (command.getName()) {
                 case "menu":
                     new MenuHandler().showMainMenu();
@@ -46,12 +61,11 @@ public class MainApplication {
                 case "retry":
                     handleRetryCommand();
                     break;
-                    
+
                 case "help":
-                    MenuHandler.printUsage();
-                    break;
-                    
-                case "unknown":
+                     MenuHandler.printUsage();
+                     break;
+
                 default:
                     System.err.println("错误: 未知命令 '" + (args.length > 0 ? args[0] : "") + "'");
                     MenuHandler.printUsage();
@@ -145,12 +159,24 @@ public class MainApplication {
             System.err.println("搜索条件格式: time:起始时间|结束时间 + user:用户1|用户2 + query:关键词 + domain:域名 + rank:最小-最大 + click:最小-最大");
             System.exit(1);
         }
-        
+
         String zkQuorum = command.getParameter("zkQuorum", "localhost");
         String zkPort = command.getParameter("zkPort", "2181");
         boolean showDetails = command.getBooleanParameter("showDetails", true);
-        
+
         com.sohu.logs.search.SearchCondition condition = com.sohu.logs.search.SearchCondition.parse(conditionStr);
         new com.sohu.logs.service.SparkSearchService().executeSparkSearchCommandLine(condition, zkQuorum, zkPort, showDetails);
+    }
+
+    private static void startWebDashboard(int port) {
+        System.out.println("==========================================");
+        System.out.println("      搜索日志分析系统 - Web Dashboard");
+        System.out.println("==========================================");
+        System.out.println("启动Web Dashboard...");
+        System.out.println("访问 http://localhost:" + port + " 查看Dashboard");
+        System.out.println("Web服务器将在后台运行...");
+        System.out.println();
+
+        new DashboardController(port);
     }
 }

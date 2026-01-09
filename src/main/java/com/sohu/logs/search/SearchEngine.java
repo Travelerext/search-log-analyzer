@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class SearchEngine {
     private static final Logger log = LoggerFactory.getLogger(SearchEngine.class);
@@ -103,7 +104,12 @@ public class SearchEngine {
                 Filter domainFilter = createDomainFilter(condition.getDomainKeywords());
                 filters.add(domainFilter);
             }
-            
+
+            if (condition.hasUrlKeywords()) {
+                Filter urlFilter = createUrlFilter(condition.getUrlKeywords());
+                filters.add(urlFilter);
+            }
+
             
             if (condition.hasRankRange()) {
                 Filter rankFilter = createRankFilter(condition.getMinRank(), condition.getMaxRank());
@@ -251,7 +257,22 @@ public class SearchEngine {
         }
         return filterList;
     }
-    
+
+    private Filter createUrlFilter(List<String> keywords) {
+        FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ONE);
+        for (String keyword : keywords) {
+            SingleColumnValueFilter filter = new SingleColumnValueFilter(
+                CF,
+                COL_URL,
+                CompareOperator.EQUAL,
+                new SubstringComparator(keyword)
+            );
+            filter.setFilterIfMissing(true);
+            filterList.addFilter(filter);
+        }
+        return filterList;
+    }
+
     private Filter createRankFilter(int minRank, int maxRank) {
         FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
         
@@ -312,23 +333,66 @@ public class SearchEngine {
     }
 
     public static void printResult(Result result) {
-        String rowKey = Bytes.toString(result.getRow());
-        String accessTime = Bytes.toString(result.getValue(CF, COL_TS));
-        String userId = Bytes.toString(result.getValue(CF, COL_USER));
-        String query = Bytes.toString(result.getValue(CF, COL_QUERY));
-        int rank = Bytes.toInt(result.getValue(CF, COL_RANK));
-        int clickOrder = Bytes.toInt(result.getValue(CF, COL_CLICK));
-        String url = Bytes.toString(result.getValue(CF, COL_URL));
-        String domain = Bytes.toString(result.getValue(CF, COL_DOMAIN));
-        
-        System.out.println("行键: " + rowKey);
-        System.out.println("  时间: " + accessTime);
-        System.out.println("  用户: " + userId);
-        System.out.println("  查询词: " + query);
-        System.out.println("  排名: " + rank);
-        System.out.println("  点击顺序: " + clickOrder);
-        System.out.println("  URL: " + url);
-        System.out.println("  域名: " + domain);
+        Map<String, Object> map = resultToMap(result);
+        System.out.println("行键: " + map.get("rowKey"));
+        System.out.println("  时间: " + map.get("accessTime"));
+        System.out.println("  用户: " + map.get("userId"));
+        System.out.println("  查询词: " + map.get("query"));
+        System.out.println("  排名: " + map.get("rank"));
+        System.out.println("  点击顺序: " + map.get("clickOrder"));
+        System.out.println("  URL: " + map.get("url"));
+        System.out.println("  域名: " + map.get("domain"));
         System.out.println();
+    }
+    
+    public static Map<String, Object> resultToMap(Result result) {
+        try {
+            Map<String, Object> map = new java.util.HashMap<>();
+            String rowKey = Bytes.toString(result.getRow());
+            
+            // 直接使用Bytes.toString处理，如果getValue返回null，Bytes.toString会处理
+            String accessTime = Bytes.toString(result.getValue(CF, COL_TS));
+            String userId = Bytes.toString(result.getValue(CF, COL_USER));
+            String query = Bytes.toString(result.getValue(CF, COL_QUERY));
+            String url = Bytes.toString(result.getValue(CF, COL_URL));
+            String domain = Bytes.toString(result.getValue(CF, COL_DOMAIN));
+            
+            // 对于数值类型，需要特殊处理
+            int rank = 0;
+            int clickOrder = 0;
+            try {
+                byte[] rankBytes = result.getValue(CF, COL_RANK);
+                if (rankBytes != null) {
+                    rank = Bytes.toInt(rankBytes);
+                }
+            } catch (Exception e) {
+                // 忽略转换错误
+            }
+            
+            try {
+                byte[] clickBytes = result.getValue(CF, COL_CLICK);
+                if (clickBytes != null) {
+                    clickOrder = Bytes.toInt(clickBytes);
+                }
+            } catch (Exception e) {
+                // 忽略转换错误
+            }
+            
+            map.put("rowKey", rowKey);
+            map.put("accessTime", accessTime != null ? accessTime : "");
+            map.put("userId", userId != null ? userId : "");
+            map.put("query", query != null ? query : "");
+            map.put("rank", rank);
+            map.put("clickOrder", clickOrder);
+            map.put("url", url != null ? url : "");
+            map.put("domain", domain != null ? domain : "");
+            return map;
+        } catch (Exception e) {
+            // 如果转换失败，返回空map但记录错误
+            log.error("转换Result到Map时出错", e);
+            Map<String, Object> map = new java.util.HashMap<>();
+            map.put("error", "数据转换错误: " + e.getMessage());
+            return map;
+        }
     }
 }
