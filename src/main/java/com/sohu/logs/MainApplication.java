@@ -9,7 +9,6 @@ public class MainApplication {
 
     public static void main(String[] args) {
         try {
-            // Handle direct dashboard startup
             if (args.length > 0 && args[0].equals("dashboard")) {
                 int port = 8080;
                 if (args.length > 1) {

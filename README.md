@@ -232,10 +232,10 @@ Web Dashboard提供图形化界面进行系统操作，可以在新的终端窗�
 
 ```bash
 # 在新终端窗口中启动Web Dashboard并显示交互菜单（默认端口9090）
-./build/install/search-log-analyzer/bin/search-log-analyzer web
+./build/install/search-log-analyzer/bin/search-log-analyzer dashboard
 
 # 指定端口在新终端窗口中启动
-./build/install/search-log-analyzer/bin/search-log-analyzer web 8080
+./build/install/search-log-analyzer/bin/search-log-analyzer dashboard 8080
 
 # 只显示终端交互菜单（不启动Web服务器）
 ./build/install/search-log-analyzer/bin/search-log-analyzer
